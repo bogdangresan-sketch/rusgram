@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация — Rusgram</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1>Rusgram</h1>
+            <p class="subtitle">Создайте новый аккаунт</p>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="POST">
+                <input type="text" name="username" placeholder="Имя пользователя" required autofocus>
+                <input type="password" name="password" placeholder="Пароль" required>
+                <input type="password" name="code" placeholder="Секретный код" required>
+                <button type="submit">Зарегистрироваться</button>
+            </form>
+            <p class="auth-link">Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a></p>
+        </div>
+    </div>
+</body>
+</html>

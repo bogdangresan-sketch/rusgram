@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1f2c33">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>{{ display_name }} — Rusgram</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <div class="app">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Rusgram</h2>
+                <div class="sidebar-actions">
+                    <button onclick="showModal()">+ Группа</button>
+                    <a href="{{ url_for('chats') }}">Чаты</a>
+                </div>
+            </div>
+            <div class="sidebar-user">
+                <div class="avatar" style="cursor:pointer;" onclick="document.getElementById('avatarInput').click()">
+                    {% if current_user and current_user['avatar'] %}
+                    <img src="{{ url_for('uploaded_file', filename=current_user['avatar']) }}">
+                    {% else %}
+                    {{ session['username'][0]|upper }}
+                    {% endif %}
+                </div>
+                <span class="user-badge">{{ session['username'] }}</span>
+                <form action="{{ url_for('upload_avatar') }}" method="POST" enctype="multipart/form-data" style="display:none;">
+                    <input type="file" name="avatar" id="avatarInput" accept="image/*" onchange="this.form.submit()">
+                </form>
+            </div>
+            <div class="section-title">Участники</div>
+            <div class="user-list" style="flex:none;max-height:120px;overflow-y:auto;">
+                {% for m in members %}
+                <div class="member-item">
+                    <div class="avatar-sm">
+                        {% if m['avatar'] %}
+                        <img src="{{ url_for('uploaded_file', filename=m['avatar']) }}">
+                        {% else %}
+                        {{ m['username'][0]|upper }}
+                        {% endif %}
+                    </div>
+                    <span style="flex:1;">{{ m['username'] }}{% if m['username'] == 'Богдан' and creator_mode %} <span class="creator-star" onclick="event.stopPropagation();alert('создатель')">⭐</span>{% endif %}</span>
+                    {% if chat['type'] == 'group' and chat['created_by'] == session['user_id'] and m['id'] != session['user_id'] %}
+                    <form action="{{ url_for('remove_member', chat_id=chat['id'], target_id=m['id']) }}" method="POST" style="display:inline;" onsubmit="return confirm('Удалить {{ m['username'] }} из группы?')">
+                        <button style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;padding:6px 10px;">✕</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% if chat['type'] == 'group' and chat['created_by'] == session['user_id'] %}
+            <div style="padding:8px 16px;display:flex;flex-direction:column;gap:6px;">
+                <button class="btn-primary" style="padding:8px;border:none;border-radius:8px;background:linear-gradient(135deg,#00a884,#06cf9c);color:#fff;font-size:13px;font-weight:600;cursor:pointer;" onclick="document.getElementById('addMemberModal').classList.add('active')">+ Добавить участника</button>
+                <form action="{{ url_for('delete_group', chat_id=chat['id']) }}" method="POST" onsubmit="return confirm('Удалить группу навсегда?')">
+                    <button class="btn-danger">Удалить группу</button>
+                </form>
+            </div>
+            {% endif %}
+            <div class="section-title">Пользователи</div>
+            <div class="user-list" style="overflow-y:auto;">
+                {% for u in all_users %}
+                <a href="{{ url_for('start_private', other_id=u['id']) }}" class="user-item" onclick="closeSidebar()">
+                    <div class="avatar-sm">
+                        {% if u['avatar'] %}
+                        <img src="{{ url_for('uploaded_file', filename=u['avatar']) }}">
+                        {% else %}
+                        {{ u['username'][0]|upper }}
+                        {% endif %}
+                    </div>
+                    {{ u['username'] }}
+                </a>
+                {% else %}
+                <div style="padding:16px;color:#8696a0;font-size:13px;">Нет других пользователей</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="main">
+            <div class="chat-header">
+                <button class="mobile-toggle" id="menuBtn" onclick="toggleSidebar()" style="display:none;">
+                    <span></span><span></span><span></span>
+                </button>
+                <div class="avatar" style="width:40px;height:40px;font-size:16px;">{{ display_name[0]|upper }}</div>
+                <div>
+                    <div class="chat-title">{{ display_name }}{% if display_name == 'Богдан' %} <span class="creator-star" onclick="event.stopPropagation();alert('создатель')">⭐</span>{% endif %}</div>
+                    <div class="chat-members-count" id="chatSubtitle">{% if chat['type'] == 'private' %}{% if other_online %}<span style="color:#00a884;">в сети</span>{% else %}{{ other_last_seen_text }}{% endif %}{% else %}{{ members|length }} участника{% endif %}</div>
+                </div>
+                <div style="flex:1;"></div>
+                <button class="call-btn" onclick="startCall('audio')" title="Позвонить">📞</button>
+                <button class="call-btn" onclick="startCall('video')" title="Видеозвонок">📹</button>
+                <button class="search-toggle" onclick="toggleSearch()" title="Поиск">🔍</button>
+                {% if chat['type'] == 'private' %}
+                <button class="search-toggle" onclick="pinChat({{ chat['id'] }})" title="Закрепить">📌</button>
+                {% endif %}
+                {% if chat['type'] == 'private' %}
+                <button class="search-toggle" onclick="toggleBlock()" title="Заблокировать">🚫</button>
+                {% endif %}
+                <div class="action-btn" onclick="openReply()">Ответить</div>
+            </div>
+            <div class="pinned-banner" id="pinnedBanner">
+                <span class="pinned-banner-icon">📌</span>
+                <span class="pinned-banner-text" id="pinnedBannerText"></span>
+                <button class="pinned-banner-close" onclick="scrollToPinned()">↑</button>
+            </div>
+            <div class="select-mode-bar" id="selectModeBar">
+                <span class="select-count" id="selectCount">0</span>
+                <button onclick="selectAllMessages()">Выбрать все</button>
+                <button onclick="deleteSelected()" style="color:#ef5350;">🗑️</button>
+                <button onclick="forwardSelected()">📨</button>
+                <button onclick="exitSelectMode()">Отмена</button>
+            </div>
+            <div class="chat-search" id="chatSearch">
+                <input type="text" id="searchInput" placeholder="Поиск сообщений..." oninput="searchMessages(this.value)">
+            </div>
+            <div class="typing-indicator" id="typingIndicator">печатает...</div>
+            <div class="messages" id="messages" onclick="closeMsgMenu()">
+                {% set ns = namespace(last_date='') %}
+                {% for msg in messages %}
+                {% set d = msg['created_at'][:10] if msg['created_at'] else '' %}
+                {% if d and d != ns.last_date %}
+                {% set ns.last_date = d %}
+                <div class="date-sep"><span>{{ 'Сегодня' if d == today else 'Вчера' if d == yesterday else d }}</span></div>
+                {% endif %}
+                <div class="message {% if msg.get('pinned') %}pinned-msg{% endif %} {{ 'own' if msg['user_id'] == session['user_id'] else '' }}" data-id="{{ msg['id'] }}" data-content="{{ msg['content'] }}" data-user="{{ msg['user_id'] }}">
+                    <div class="msg-author">{{ 'Rusgram' if msg['user_id'] == 999 else msg['username'] }}{% if msg['user_id'] == 999 %} <span class="verified-badge" onclick="event.stopPropagation();alert('официальный акаунт Rusgram')">✓</span>{% endif %}{% if msg['username'] == 'Богдан' and creator_mode and msg['user_id'] != 999 %} <span class="creator-star" onclick="event.stopPropagation();alert('создатель')">⭐</span>{% endif %}</div>
+                    {% if msg.get('reply') %}
+                    <div class="msg-reply"><span class="msg-reply-author">{{ msg['reply']['username'] }}</span>{% if msg['reply']['content'] %}<span class="msg-reply-text">{{ msg['reply']['content'][:80] }}{% if msg['reply']['content']|length > 80 %}...{% endif %}</span>{% elif msg['reply']['file'] %}<span class="msg-reply-file">{% if msg['reply']['file_type'] == 'image' %}📷 Фото{% elif msg['reply']['file_type'] == 'video' %}🎬 Видео{% elif msg['reply']['file_type'] == 'audio' %}🎵 Аудио{% else %}📎 Файл{% endif %}</span>{% endif %}</div>
+                    {% endif %}
+                    {% if msg['file'] %}
+                    <div class="msg-media {% if msg['file_type'] == 'video' %}msg-video-circle{% elif msg['file_type'] == 'audio' %}msg-audio{% endif %}">
+                        {% if msg['file_type'] == 'image' %}
+                        <img src="{{ url_for('uploaded_file', filename=msg['file']) }}" onclick="openLightbox(this.src)" loading="lazy">
+                        {% elif msg['file_type'] == 'video' %}
+                        <video muted loop playsinline preload="auto" class="circle-video" onclick="toggleCircleSound(this)">
+                            <source src="{{ url_for('uploaded_file', filename=msg['file']) }}">
+                        </video>
+                        <div class="circle-sound-badge" onclick="toggleCircleSound(this.previousElementSibling)">🔇</div>
+                        {% elif msg['file_type'] == 'audio' %}
+                        <audio controls preload="metadata">
+                            <source src="{{ url_for('uploaded_file', filename=msg['file']) }}">
+                        </audio>
+                        {% elif msg['file'] %}
+                        <div class="file-attachment"><span class="file-icon">📎</span><span class="file-name">{{ msg['file'] }}</span></div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if msg['content'] %}
+                    <div class="msg-text">{{ msg['content']|urlize(40, target='_blank') }}</div>
+                    {% endif %}
+                    {% if msg['user_id'] == session['user_id'] %}
+                    <span class="msg-status {{ msg.get('status','sent') }}">{% if msg.get('status') == 'sent' %}✓{% elif msg.get('status') == 'delivered' %}✓✓{% endif %}</span>
+                    {% endif %}
+                    <div class="msg-time">{{ msg['created_at'][11:16] if msg['created_at'] else '' }}{% if msg['edited'] %} <span style="font-size:10px;color:rgba(233,237,239,0.4);">ред.</span>{% endif %}</div>
+                    <div class="msg-reactions" data-message-id="{{ msg['id'] }}"></div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="reply-preview" id="replyPreview" style="display:none;">
+                <div class="reply-preview-content">
+                    <div class="reply-preview-author" id="replyPreviewAuthor"></div>
+                    <div class="reply-preview-text" id="replyPreviewText"></div>
+                </div>
+                <button class="reply-preview-close" onclick="cancelReply()">&times;</button>
+            </div>
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <button class="attach-btn" onclick="document.getElementById('fileInput').click()" type="button">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="#8696a0"><path d="M1.816 15.556v.002c0 1.502.584 2.912 1.646 3.972a5.576 5.576 0 003.972 1.646c1.502 0 2.912-.584 3.972-1.646L20.967 8.36a4.152 4.152 0 00-5.874-5.874L4.236 13.343a2.752 2.752 0 003.888 3.888l8.45-8.45a1.376 1.376 0 00-1.946-1.946l-8.45 8.45a.55.55 0 01-.777-.777l9.207-9.207a2.75 2.75 0 013.888 3.888l-8.449 8.45a4.152 4.152 0 01-5.874-5.874l8.45-8.45a5.576 5.576 0 00-3.972-1.646c-1.502 0-2.912.584-3.972 1.646L3.462 11.583c-.972.972-1.646 2.293-1.646 3.973"/></svg>
+                    </button>
+                    <button class="attach-btn" onclick="startVoiceRecord()" type="button" id="voiceBtn" title="Голосовое">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#8696a0"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zm7 9c0 3.53-2.61 6.43-6 6.92V21h-2v-3.08c-3.39-.49-6-3.39-6-6.92h2c0 2.76 2.24 5 5 5s5-2.24 5-5h2z"/></svg>
+                    </button>
+                    <button class="attach-btn" onclick="startVideoCircle()" type="button" id="videoCircleBtn" title="Кружок">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#8696a0"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                    </button>
+                    <input type="text" id="msg-input" placeholder="Сообщение..." autocomplete="off">
+                    <button id="send-btn">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>
+                    </button>
+                </div>
+                <div id="filePreview" class="file-preview" style="display:none;">
+                    <span id="fileName"></span>
+                    <button onclick="clearFile()" type="button">&times;</button>
+                </div>
+                <input type="file" id="fileInput" accept="image/*,video/*,.gif" style="display:none">
+            </div>
+        </div>
+    </div>
+
+    <div class="recording-overlay" id="recordingOverlay">
+        <div class="recording-box">
+            <div class="recording-indicator" id="recIndicator"></div>
+            <div class="recording-timer" id="recTimer">00:00</div>
+            <div class="recording-actions">
+                <button class="rec-cancel" onclick="cancelRecording()">✕</button>
+                <button class="rec-send" onclick="sendRecording()">✓</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close">&times;</span>
+        <img id="lightboxImg">
+    </div>
+
+    <div class="action-sheet-overlay" id="actionSheetOverlay" onclick="closeMsgMenu()"></div>
+    <div class="action-sheet" id="actionSheet">
+        <div class="action-sheet-handle"></div>
+        <button onclick="replyToMessage()" class="action-sheet-btn">↩️ Ответить</button>
+        <button onclick="forwardMessage()" class="action-sheet-btn">📨 Переслать</button>
+        <button onclick="showReactionPicker()" class="action-sheet-btn">😊 Реакция</button>
+        <button onclick="pinMessageInChat()" class="action-sheet-btn" id="pinMsgBtn">📌 Закрепить</button>
+        <button onclick="copyMsgWithTime()" class="action-sheet-btn">📋 Копировать (с датой)</button>
+        <button onclick="copyMessage()" class="action-sheet-btn">📋 Только текст</button>
+        <button onclick="editMessage()" class="action-sheet-btn" id="editBtn">✏️ Изменить</button>
+        <button onclick="selectMessage()" class="action-sheet-btn">☑️ Выбрать</button>
+        <button onclick="reportMessage()" class="action-sheet-btn">⚠️ Пожаловаться</button>
+        <button onclick="deleteForAll()" class="action-sheet-btn action-sheet-danger" id="deleteForAllBtn">🗑️ Удалить у всех</button>
+        <button onclick="deleteMessage()" class="action-sheet-btn action-sheet-danger" id="deleteBtn">🗑️ Удалить у себя</button>
+        <button onclick="closeMsgMenu()" class="action-sheet-btn action-sheet-cancel">Отмена</button>
+    </div>
+
+    <div class="msg-menu" id="msgMenu">
+        <button onclick="replyToMessage()">↩️ Ответить</button>
+        <button onclick="forwardMessage()">📨 Переслать</button>
+        <button onclick="showReactionPicker()">😊 Реакция</button>
+        <button onclick="pinMessageInChat()" id="pinMsgDesktop">📌 Закрепить</button>
+        <button onclick="copyMsgWithTime()">📋 Копировать (с датой)</button>
+        <button onclick="copyMessage()">📋 Только текст</button>
+        <button onclick="editMessage()" id="editMsgBtnDesktop">✏️ Изменить</button>
+        <button onclick="selectMessage()">☑️ Выбрать</button>
+        <button onclick="reportMessage()">⚠️ Пожаловаться</button>
+        <button onclick="deleteForAll()" style="color:#ef5350;" id="deleteForAllDesktop">🗑️ Удалить у всех</button>
+        <button onclick="deleteMessage()" style="color:#ef5350;" id="deleteMsgBtnDesktop">🗑️ Удалить у себя</button>
+    </div>
+
+    <div class="modal-overlay" id="addMemberModal">
+        <div class="modal">
+            <h2>Добавить участника</h2>
+            {% if non_member_users %}
+            <form method="POST" action="{{ url_for('add_member', chat_id=chat['id']) }}">
+                <div class="members-section">
+                    {% for u in non_member_users %}
+                    <label><input type="radio" name="user_id" value="{{ u['id'] }}" required> {{ u['username'] }}</label>
+                    {% endfor %}
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('addMemberModal').classList.remove('active')">Отмена</button>
+                    <button type="submit" class="btn-primary">Добавить</button>
+                </div>
+            </form>
+            {% else %}
+            <p style="color:#8696a0;font-size:14px;padding:8px 0;">Все пользователи уже в группе</p>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="document.getElementById('addMemberModal').classList.remove('active')">Закрыть</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="groupModal">
+        <div class="modal">
+            <h2>Создать группу</h2>
+            <form action="{{ url_for('create_group') }}" method="POST">
+                <input type="text" name="name" placeholder="Название группы" required>
+                <div class="section-title" style="padding-left:0;">Выберите участников</div>
+                <div class="members-section">
+                    {% for u in all_users %}
+                    <label><input type="checkbox" name="members" value="{{ u['id'] }}"> {{ u['username'] }}</label>
+                    {% else %}
+                    <p style="color:#8696a0;font-size:13px;padding:8px 0;">Нет других пользователей</p>
+                    {% endfor %}
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="hideModal()">Отмена</button>
+                    <button type="submit" class="btn-primary">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <h2>Изменить сообщение</h2>
+            <input type="text" id="editInput" style="width:100%;padding:14px 16px;background:#2a3942;border:2px solid transparent;border-radius:12px;color:#e9edef;font-size:15px;outline:none;margin-bottom:16px;">
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="document.getElementById('editModal').classList.remove('active')">Отмена</button>
+                <button type="button" class="btn-primary" onclick="confirmEdit()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="forwardModal">
+        <div class="modal">
+            <h2>Переслать сообщение</h2>
+            <div class="members-section" id="forwardChatList">
+                <p style="color:#8696a0;font-size:13px;padding:8px 0;">Загрузка...</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeForwardModal()">Отмена</button>
+                <button type="button" class="btn-primary" onclick="confirmForward()">Переслать</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="accentModal">
+        <div class="modal">
+            <h2>Цвет темы чата</h2>
+            <p style="color:#8696a0;font-size:13px;margin-bottom:12px;">Выберите цвет фона для этого чата</p>
+            <div class="accent-picker">
+                {% for c in ['default', '#0d1a1e', '#1a0d0d', '#0d1a0d', '#1a1a0d', '#0d0d1a', '#1a0d1a', '#0d1a1a'] %}
+                <div class="accent-dot {% if c == (chat.get('accent_color') or 'default') %}active{% endif %}" style="background:{{ c if c != 'default' else 'radial-gradient(ellipse at center,#0d1a1e,#0a1014)' }};" onclick="setAccent('{{ chat['id'] }}', '{{ c }}')" data-color="{{ c }}"></div>
+                {% endfor %}
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="document.getElementById('accentModal').classList.remove('active')">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="reaction-picker" id="reactionPicker">
+        <button onclick="toggleReaction('👍')">👍</button>
+        <button onclick="toggleReaction('❤️')">❤️</button>
+        <button onclick="toggleReaction('😂')">😂</button>
+        <button onclick="toggleReaction('😮')">😮</button>
+        <button onclick="toggleReaction('😢')">😢</button>
+        <button onclick="toggleReaction('🙏')">🙏</button>
+    </div>
+
+    <script>
+            const CREATOR_NAME = 'Богдан'; const creatorStar = '<span class="creator-star" onclick="event.stopPropagation();alert(\'создатель\')">⭐</span>';
+            let creatorModeEnabled = {{ 'true' if creator_mode else 'false' }};
+            const chatId = {{ chat['id'] }};
+        let lastId = {{ messages[-1]['id'] if messages else 0 }};
+        let activeMsgId = null;
+        let activeMsgUserId = null;
+        let longPressTimer = null;
+        const isMobile = window.innerWidth <= 768;
+        let selectedFile = null;
+        let eventSource = null;
+        let reactionPickerMsgId = null;
+        let myUserId = {{ current_user['id'] }};
+        let replyToMsgId = null;
+        let otherUserId = {{ other_user_id if other_user_id else 'null' }};
+
+        const COMMON_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+        function addMessage(msg) {
+            const container = document.getElementById('messages');
+            let existing = container.querySelector('.message[data-id="' + msg.id + '"]');
+            if (existing) return;
+            const div = document.createElement('div');
+            div.className = 'message' + (msg.user_id === myUserId ? ' own' : '');
+            div.dataset.id = msg.id;
+            div.dataset.content = msg.content || '';
+            div.dataset.user = msg.user_id;
+            setupMessageEvents(div);
+            let displayName = msg.user_id === 999 ? 'Rusgram' : msg.username;
+            let verifiedBadge = msg.user_id === 999 ? '<span class="verified-badge" onclick="event.stopPropagation();alert(\'официальный акаунт Rusgram\')">✓</span>' : '';
+            let html = '<div class="msg-author">' + displayName + verifiedBadge + (displayName === CREATOR_NAME && creatorModeEnabled && msg.user_id !== 999 ? ' ' + creatorStar : '') + '</div>';
+            if (msg.reply) {
+                html += '<div class="msg-reply"><span class="msg-reply-author">' + escapeHtml(msg.reply.username || '') + '</span>';
+                if (msg.reply.content) html += '<span class="msg-reply-text">' + escapeHtml(msg.reply.content) + '</span>';
+                else if (msg.reply.file) html += '<span class="msg-reply-file">' + (msg.reply.file_type === 'image' ? '📷 Фото' : msg.reply.file_type === 'video' ? '🎬 Видео' : msg.reply.file_type === 'audio' ? '🎵 Аудио' : '📎 Файл') + '</span>';
+                html += '</div>';
+            }
+            if (msg.file) {
+                var mediaUrl = '{{ url_for("uploaded_file", filename="") }}' + msg.file;
+                if (msg.file_type === 'image' || msg.file_type === 'gif') {
+                    html += '<div class="msg-media"><img src="' + mediaUrl + '" onclick="openLightbox(this.src)" loading="lazy"></div>';
+                } else if (msg.file_type === 'video') {
+                    html += '<div class="msg-media msg-video-circle"><video muted loop playsinline preload="auto" class="circle-video" onclick="toggleCircleSound(this)"><source src="' + mediaUrl + '"></video><div class="circle-sound-badge" onclick="toggleCircleSound(this.previousElementSibling)">🔇</div></div>';
+                } else if (msg.file_type === 'audio') {
+                    html += '<div class="msg-media msg-audio"><audio controls preload="metadata"><source src="' + mediaUrl + '"></audio></div>';
+                }
+            }
+            if (msg.content) {
+                html += '<div class="msg-text">' + escapeHtml(msg.content) + '</div>';
+            }
+            if (msg.user_id === myUserId) {
+                var statusClass = msg.status || 'sent';
+                html += '<span class="msg-status ' + statusClass + '">' + (statusClass === 'sent' ? '✓' : '✓✓') + '</span>';
+            }
+            let timeStr = msg.created_at ? msg.created_at.slice(11,16) : '';
+            if (msg.edited) timeStr += ' <span style="font-size:10px;color:rgba(233,237,239,0.4);">ред.</span>';
+            html += '<div class="msg-time">' + timeStr + '</div>';
+            html += '<div class="msg-reactions" data-message-id="' + msg.id + '"></div>';
+            div.innerHTML = html;
+            container.appendChild(div);
+            if (msg.reactions) renderReactions(div, msg.reactions);
+            container.scrollTop = container.scrollHeight;
+            observeCircleVideos();
+        }
+
+        function renderReactions(msgEl, reactions) {
+            const container = msgEl.querySelector('.msg-reactions');
+            if (!container) return;
+            if (!reactions || reactions.length === 0) { container.innerHTML = ''; return; }
+            const grouped = {};
+            for (const r of reactions) {
+                if (!grouped[r.emoji]) grouped[r.emoji] = { emoji: r.emoji, count: 0, userReacted: false };
+                grouped[r.emoji].count++;
+                if (r.user_id === myUserId) grouped[r.emoji].userReacted = true;
+            }
+            let html = '';
+            for (const g of Object.values(grouped)) {
+                html += '<span class="reaction-badge' + (g.userReacted ? ' reacted' : '') + '" data-emoji="' + g.emoji + '" onclick="toggleReactionFromBadge(' + msgEl.dataset.id + ', \'' + g.emoji + '\')">' + g.emoji + (g.count > 1 ? '<span class="reaction-count">' + g.count + '</span>' : '') + '</span>';
+            }
+            html += '<span class="reaction-add" onclick="event.stopPropagation();openReactionPicker(' + msgEl.dataset.id + ', this)">+</span>';
+            container.innerHTML = html;
+        }
+
+        function toggleReactionFromBadge(msgId, emoji) {
+            setReaction(msgId, emoji);
+        }
+
+        function toggleReaction(emoji) {
+            if (reactionPickerMsgId) {
+                setReaction(reactionPickerMsgId, emoji);
+                closeReactionPicker();
+            }
+        }
+
+        function setReaction(msgId, emoji) {
+            fetch('/api/react', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_id: parseInt(msgId), emoji: emoji })
+            }).then(r => r.json()).then(data => {
+                const el = document.querySelector('.message[data-id="' + msgId + '"]');
+                if (!el) return;
+                const reactions = el.querySelector('.msg-reactions');
+                if (!reactions) return;
+                const existing = Array.from(reactions.querySelectorAll('.reaction-badge')).find(b => b.dataset.emoji === emoji);
+                if (data.action === 'added') {
+                    if (existing) {
+                        const countSpan = existing.querySelector('.reaction-count');
+                        const count = parseInt(countSpan ? countSpan.textContent : 1);
+                        if (countSpan) countSpan.textContent = count + 1;
+                        else existing.innerHTML = emoji + '<span class="reaction-count">2</span>';
+                        existing.classList.add('reacted');
+                    } else {
+                        const addBtn = reactions.querySelector('.reaction-add');
+                        const badge = document.createElement('span');
+                        badge.className = 'reaction-badge reacted pop';
+                        badge.dataset.emoji = emoji;
+                        badge.textContent = emoji;
+                        setTimeout(function() { badge.classList.remove('pop'); }, 300);
+                        badge.onclick = function(e) { e.stopPropagation(); toggleReactionFromBadge(msgId, emoji); };
+                        reactions.insertBefore(badge, addBtn);
+                    }
+                } else if (data.action === 'removed') {
+                    if (existing) {
+                        const countSpan = existing.querySelector('.reaction-count');
+                        if (countSpan) {
+                            const c = parseInt(countSpan.textContent) - 1;
+                            if (c <= 1) existing.innerHTML = emoji;
+                            else countSpan.textContent = c;
+                            existing.classList.remove('reacted');
+                        } else {
+                            existing.remove();
+                        }
+                    }
+                }
+            });
+        }
+
+        function openReactionPicker(msgId, anchor) {
+            reactionPickerMsgId = msgId;
+            const picker = document.getElementById('reactionPicker');
+            if (isMobile) {
+                picker.style.position = 'fixed';
+                picker.style.bottom = '80px';
+                picker.style.left = '50%';
+                picker.style.transform = 'translateX(-50%)';
+                picker.style.top = 'auto';
+            } else {
+                const rect = anchor.getBoundingClientRect();
+                picker.style.position = 'fixed';
+                picker.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+                picker.style.left = Math.max(8, Math.min(window.innerWidth - 220, rect.left)) + 'px';
+                picker.style.top = 'auto';
+                picker.style.transform = 'none';
+            }
+            picker.classList.add('active');
+            setTimeout(() => { document.addEventListener('click', closeReactionPickerOutside, true); }, 10);
+        }
+
+        function closeReactionPickerOutside(e) {
+            const picker = document.getElementById('reactionPicker');
+            if (!picker.contains(e.target)) { closeReactionPicker(); }
+        }
+
+        function closeReactionPicker() {
+            document.getElementById('reactionPicker').classList.remove('active');
+            document.removeEventListener('click', closeReactionPickerOutside, true);
+            reactionPickerMsgId = null;
+        }
+
+        function showReactionPicker() {
+            if (!activeMsgId) return;
+            reactionPickerMsgId = activeMsgId;
+            const picker = document.getElementById('reactionPicker');
+            picker.style.position = 'fixed';
+            if (isMobile) {
+                picker.style.bottom = '80px';
+                picker.style.left = '50%';
+                picker.style.transform = 'translateX(-50%)';
+                picker.style.top = 'auto';
+            } else {
+                picker.style.bottom = '40px';
+                picker.style.left = '50%';
+                picker.style.transform = 'translateX(-50%)';
+                picker.style.top = 'auto';
+            }
+            picker.classList.add('active');
+            closeMsgMenu();
+            setTimeout(() => { document.addEventListener('click', closeReactionPickerOutside, true); }, 10);
+        }
+
+        let pollingInterval = null;
+
+        function pollMessages() {
+            fetch('/api/messages/' + chatId + '?since=' + lastId)
+                .then(r => r.json())
+                .then(msgs => {
+                    if (msgs.length === 0) return;
+                    lastId = msgs[msgs.length - 1].id;
+                    for (const msg of msgs) addMessage(msg);
+                });
+        }
+
+        function pollReactions() {
+            fetch('/api/reactions/' + chatId + '?since=' + 0)
+                .then(r => r.json())
+                .then(data => {
+                    for (const item of data) {
+                        const el = document.querySelector('.message[data-id="' + item.message_id + '"]');
+                        if (!el) continue;
+                        const reactions = el.querySelector('.msg-reactions');
+                        if (!reactions) continue;
+                        renderReactions(el, item.all_reactions);
+                    }
+                });
+        }
+
+        function connectStream() {
+            eventSource = new EventSource('/api/stream/' + chatId + '?since=' + lastId);
+            eventSource.onmessage = function(e) {
+                const msg = JSON.parse(e.data);
+                addMessage(msg);
+            };
+            eventSource.addEventListener('typing', function(e) {
+                const data = JSON.parse(e.data);
+                if (handleTypingEvent) handleTypingEvent(data);
+            });
+            eventSource.addEventListener('reaction', function(e) {
+                const data = JSON.parse(e.data);
+                const el = document.querySelector('.message[data-id="' + data.message_id + '"]');
+                if (!el) return;
+                const reactions = el.querySelector('.msg-reactions');
+                if (!reactions) return;
+                const emoji = data.emoji;
+                const existing = Array.from(reactions.querySelectorAll('.reaction-badge')).find(b => b.dataset.emoji === emoji && b.classList.contains('reacted') && data.user_id === myUserId);
+                if (existing && data.user_id === myUserId) return;
+                const badge = Array.from(reactions.querySelectorAll('.reaction-badge')).find(b => b.dataset.emoji === emoji);
+                if (badge) {
+                    if (data.user_id === myUserId) badge.classList.add('reacted');
+                    const countSpan = badge.querySelector('.reaction-count');
+                    const count = countSpan ? parseInt(countSpan.textContent) : 1;
+                    if (countSpan) countSpan.textContent = count + 1;
+                    else badge.innerHTML = emoji + '<span class="reaction-count">2</span>';
+                } else {
+                    const addBtn = reactions.querySelector('.reaction-add');
+                    const b = document.createElement('span');
+                    b.className = 'reaction-badge' + (data.user_id === myUserId ? ' reacted' : '');
+                    b.dataset.emoji = emoji;
+                    b.textContent = emoji;
+                    b.onclick = function(ev) { ev.stopPropagation(); toggleReactionFromBadge(data.message_id, emoji); };
+                    reactions.insertBefore(b, addBtn);
+                }
+            });
+            eventSource.addEventListener('call', function(e) {
+                const data = JSON.parse(e.data);
+                if (handleCallEvent) handleCallEvent(data);
+            });
+            eventSource.onerror = function() {
+                eventSource.close();
+                eventSource = null;
+                if (!pollingInterval) {
+                    pollingInterval = setInterval(pollMessages, 2000);
+                    setInterval(pollReactions, 3000);
+                }
+                // Try to reconnect SSE after 5 seconds
+                setTimeout(function() {
+                    if (pollingInterval) {
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                    }
+                    if (!eventSource) connectStream();
+                }, 5000);
+            };
+            eventSource.onopen = function() {
+                if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+            };
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const content = input.value.trim();
+            if (!content && !selectedFile) return;
+            const url = '/api/send';
+            const opts = selectedFile
+                ? { method: 'POST', body: (() => { const fd = new FormData(); fd.append('chat_id', chatId); fd.append('content', content); fd.append('file', selectedFile); if (replyToMsgId) fd.append('reply_to', replyToMsgId); return fd; })() }
+                : { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ chat_id: chatId, content: content, reply_to: replyToMsgId }) };
+            fetch(url, opts).then(r => {
+                if (!r.ok) {
+                    if (r.status === 403) { alert('Нет доступа к этому чату в анонимном режиме'); }
+                    else { alert('Ошибка отправки: сервер вернул ' + r.status); }
+                    return null;
+                }
+                return r.json();
+            }).then(msg => {
+                if (!msg || !msg.id) return;
+                input.value = '';
+                if (selectedFile) clearFile();
+                cancelReply();
+                addMessage(msg);
+                if (msg.id > lastId) lastId = msg.id;
+            }).catch(function(e) { alert('Ошибка соединения. Попробуйте ещё раз.'); });
+        }
+
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+        document.getElementById('msg-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
+        });
+        // Typing indicator + Draft save
+        var typingTimeout = null;
+        var draftTimeout = null;
+        document.getElementById('msg-input').addEventListener('input', function() {
+            if (typingTimeout) clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(function() { typingTimeout = null; }, 3000);
+            fetch('/api/typing', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ chat_id: chatId })
+            });
+            if (draftTimeout) clearTimeout(draftTimeout);
+            draftTimeout = setTimeout(function() {
+                var text = document.getElementById('msg-input').value;
+                fetch('/api/draft', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ chat_id: chatId, text: text })
+                });
+            }, 1000);
+        });
+        // Restore draft on load
+        {% if draft %}
+        document.getElementById('msg-input').value = JSON.parse('{{ draft|tojson|safe }}');
+        {% endif %}
+        // Apply accent color on load
+        {% if chat.get('accent_color') and chat['accent_color'] != 'default' %}
+        document.getElementById('messages').style.background = '{{ chat["accent_color"] }}';
+        {% endif %}
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFile = file;
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('filePreview').style.display = 'flex';
+        });
+
+        function clearFile() {
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('filePreview').style.display = 'none';
+        }
+
+        // Recording state
+        var mediaRecorder = null;
+        var recordingChunks = [];
+        var recordingTimer = null;
+        var recordingSeconds = 0;
+        var recordingType = null; // 'audio' or 'video'
+
+        function startVoiceRecord() {
+            recordingType = 'audio';
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+                startRecording(stream);
+            }).catch(function() {});
+        }
+
+        function startVideoCircle() {
+            recordingType = 'video';
+            navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user', width: 360, height: 360 } }).then(function(stream) {
+                var videoEl = document.createElement('video');
+                videoEl.srcObject = stream;
+                videoEl.muted = true;
+                videoEl.playsInline = true;
+                videoEl.autoplay = true;
+                videoEl.style.width = '100%';
+                videoEl.style.borderRadius = '50%';
+                videoEl.style.aspectRatio = '1';
+                videoEl.style.objectFit = 'cover';
+                var box = document.querySelector('.recording-box');
+                var existing = box.querySelector('.rec-preview');
+                if (existing) existing.remove();
+                var preview = document.createElement('div');
+                preview.className = 'rec-preview';
+                preview.appendChild(videoEl);
+                box.insertBefore(preview, box.querySelector('.recording-actions'));
+                startRecording(stream);
+            }).catch(function() {});
+        }
+
+        function startRecording(stream) {
+            recordingChunks = [];
+            recordingSeconds = 0;
+            document.getElementById('recTimer').textContent = '00:00';
+            document.getElementById('recordingOverlay').classList.add('active');
+            var mimeType = recordingType === 'audio' ? 'audio/webm' : 'video/webm;codecs=vp8,opus';
+            try {
+                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+            } catch(e) {
+                mediaRecorder = new MediaRecorder(stream);
+            }
+            mediaRecorder.ondataavailable = function(e) {
+                if (e.data.size > 0) recordingChunks.push(e.data);
+            };
+            mediaRecorder.onstop = function() {
+                stream.getTracks().forEach(function(t) { t.stop(); });
+                var preview = document.querySelector('.rec-preview');
+                if (preview) preview.remove();
+            };
+            mediaRecorder.start(100);
+            recordingTimer = setInterval(function() {
+                recordingSeconds++;
+                var m = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+                var s = String(recordingSeconds % 60).padStart(2, '0');
+                document.getElementById('recTimer').textContent = m + ':' + s;
+                if (recordingSeconds >= 180) sendRecording();
+            }, 1000);
+        }
+
+        // IntersectionObserver for auto-playing circle videos
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.circleObserver) window.circleObserver.disconnect();
+            window.circleObserver = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    var video = entry.target;
+                    if (entry.isIntersecting) {
+                        video.play().catch(function(){});
+                    } else {
+                        video.pause();
+                    }
+                });
+            }, { threshold: 0.6 });
+            document.querySelectorAll('.circle-video').forEach(function(v) {
+                window.circleObserver.observe(v);
+            });
+        });
+
+        function toggleCircleSound(video) {
+            video.muted = !video.muted;
+            var badge = video.nextElementSibling;
+            if (badge && badge.classList.contains('circle-sound-badge')) {
+                badge.textContent = video.muted ? '🔇' : '🔊';
+            }
+            if (!video.muted) {
+                video.play().catch(function(){});
+            }
+        }
+
+        // Re-observe circle videos added via SSE
+        function observeCircleVideos() {
+            if (!window.circleObserver) return;
+            document.querySelectorAll('.circle-video:not([data-observed])').forEach(function(v) {
+                v.setAttribute('data-observed', '1');
+                window.circleObserver.observe(v);
+            });
+        }
+
+        function cancelRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+            clearInterval(recordingTimer);
+            document.getElementById('recordingOverlay').classList.remove('active');
+            var preview = document.querySelector('.rec-preview');
+            if (preview) preview.remove();
+        }
+
+        function sendRecording() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+            mediaRecorder.stop();
+            clearInterval(recordingTimer);
+            document.getElementById('recordingOverlay').classList.remove('active');
+            var blob = new Blob(recordingChunks, { type: recordingType === 'audio' ? 'audio/webm' : 'video/webm' });
+            var ext = recordingType === 'audio' ? 'opus' : 'webm';
+            var file = new File([blob], 'record.' + ext, { type: blob.type });
+            var formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('content', '');
+            formData.append('file', file);
+            fetch('/api/send', { method: 'POST', body: formData }).then(function(r) { return r.json(); }).then(function(msg) {
+                if (msg && msg.id) { addMessage(msg); if (msg.id > lastId) lastId = msg.id; }
+            });
+        }
+
+        function openLightbox(src) {
+            document.getElementById('lightboxImg').src = src;
+            document.getElementById('lightbox').classList.add('active');
+        }
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+        }
+
+        connectStream();
+
+        function setupMessageEvents(el) {
+            el.oncontextmenu = function(e) { showMsgMenu(e, parseInt(el.dataset.id), parseInt(el.dataset.user)); };
+            if (isMobile) {
+                el.addEventListener('touchstart', function(e) {
+                    longPressTimer = setTimeout(function() {
+                        showMsgMenu(null, parseInt(el.dataset.id), parseInt(el.dataset.user));
+                    }, 500);
+                }, {passive: true});
+                el.addEventListener('touchend', function() { clearTimeout(longPressTimer); }, {passive: true});
+                el.addEventListener('touchmove', function() { clearTimeout(longPressTimer); }, {passive: true});
+            }
+        }
+        document.querySelectorAll('.message').forEach(setupMessageEvents);
+
+        // Render initial reactions
+        var initialMessages = {{ messages | tojson }};
+        if (initialMessages && initialMessages.length) {
+            document.querySelectorAll('.message').forEach(function(el) {
+                var msgId = parseInt(el.dataset.id);
+                var msg = initialMessages.find(function(m) { return m.id === msgId; });
+                if (msg && msg.reactions) renderReactions(el, msg.reactions);
+            });
+        }
+
+        function showMsgMenu(e, msgId, userId) {
+            closeMsgMenu();
+            activeMsgId = msgId;
+            activeMsgUserId = userId;
+            const isOwn = userId === myUserId;
+            if (isMobile) {
+                document.getElementById('editBtn').style.display = isOwn ? 'flex' : 'none';
+                document.getElementById('deleteBtn').style.display = isOwn ? 'flex' : 'none';
+                document.getElementById('actionSheet').classList.add('active');
+                document.getElementById('actionSheetOverlay').classList.add('active');
+            } else {
+                document.getElementById('editMsgBtnDesktop').style.display = isOwn ? 'flex' : 'none';
+                document.getElementById('deleteMsgBtnDesktop').style.display = isOwn ? 'flex' : 'none';
+                const menu = document.getElementById('msgMenu');
+                let x = e.clientX, y = e.clientY;
+                if (x + 170 > window.innerWidth) x = window.innerWidth - 180;
+                if (y + 140 > window.innerHeight) y = window.innerHeight - 150;
+                menu.style.left = x + 'px';
+                menu.style.top = y + 'px';
+                menu.style.display = 'block';
+            }
+        }
+
+        function closeMsgMenu() {
+            document.getElementById('msgMenu').style.display = 'none';
+            document.getElementById('actionSheet').classList.remove('active');
+            document.getElementById('actionSheetOverlay').classList.remove('active');
+        }
+
+        function copyMessage() {
+            const el = document.querySelector(`.message[data-id="${activeMsgId}"]`);
+            if (el) navigator.clipboard.writeText(el.dataset.content).catch(function(){});
+            closeMsgMenu();
+        }
+
+        function editMessage() {
+            const el = document.querySelector(`.message[data-id="${activeMsgId}"]`);
+            if (!el) { closeMsgMenu(); return; }
+            document.getElementById('editInput').value = el.dataset.content;
+            document.getElementById('editModal').classList.add('active');
+            closeMsgMenu();
+        }
+
+        function confirmEdit() {
+            const content = document.getElementById('editInput').value.trim();
+            if (!content) return;
+            fetch('/api/edit_message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_id: activeMsgId, content: content })
+            }).then(r => r.json()).then(() => {
+                document.getElementById('editModal').classList.remove('active');
+                const el = document.querySelector(`.message[data-id="${activeMsgId}"]`);
+                if (el) {
+                    el.dataset.content = content;
+                    const txt = el.querySelector('.msg-text');
+                    if (txt) txt.textContent = content;
+                    let t = el.querySelector('.msg-time');
+                    if (t && !t.innerHTML.includes('ред.')) t.innerHTML += ' <span style="font-size:10px;color:rgba(233,237,239,0.4);">ред.</span>';
+                }
+            });
+        }
+
+        function deleteMessage() {
+            if (!confirm('Удалить сообщение?')) return;
+            fetch('/api/delete_message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_id: activeMsgId })
+            }).then(r => r.json()).then(() => {
+                const el = document.querySelector(`.message[data-id="${activeMsgId}"]`);
+                if (el) el.remove();
+                closeMsgMenu();
+            });
+        }
+
+        // Reply
+        function replyToMessage() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            const el = document.querySelector(`.message[data-id="${activeMsgId}"]`);
+            if (!el) { closeMsgMenu(); return; }
+            replyToMsgId = activeMsgId;
+            const author = el.querySelector('.msg-author')?.textContent || 'Пользователь';
+            const text = el.dataset.content || (el.querySelector('.msg-text')?.textContent || '');
+            document.getElementById('replyPreviewAuthor').textContent = author;
+            document.getElementById('replyPreviewText').textContent = text || (el.querySelector('.msg-media') ? '📎 Вложение' : '');
+            document.getElementById('replyPreview').style.display = 'flex';
+            document.getElementById('msg-input').focus();
+            closeMsgMenu();
+        }
+        function cancelReply() {
+            replyToMsgId = null;
+            document.getElementById('replyPreview').style.display = 'none';
+        }
+
+        // Forward
+        let forwardMsgId = null;
+        function forwardMessage() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            forwardMsgId = activeMsgId;
+            closeMsgMenu();
+            const list = document.getElementById('forwardChatList');
+            list.innerHTML = '<p style="color:#8696a0;font-size:13px;padding:8px 0;">Загрузка...</p>';
+            document.getElementById('forwardModal').classList.add('active');
+            fetch('/api/chats').then(function(r) { return r.json(); }).then(function(data) {
+                if (!data || !data.chats) { list.innerHTML = '<p style="color:#8696a0;font-size:13px;padding:8px 0;">Нет чатов</p>'; return; }
+                let html = '';
+                for (const c of data.chats) {
+                    if (c.id === chatId) continue;
+                    html += '<label><input type="checkbox" value="' + c.id + '"> ' + (c.type === 'group' ? '👥 ' : '💬 ') + c.display_name + '</label>';
+                }
+                list.innerHTML = html || '<p style="color:#8696a0;font-size:13px;padding:8px 0;">Нет других чатов</p>';
+            }).catch(function() { list.innerHTML = '<p style="color:#8696a0;font-size:13px;padding:8px 0;">Ошибка загрузки</p>'; });
+        }
+        function closeForwardModal() {
+            document.getElementById('forwardModal').classList.remove('active');
+        }
+        function confirmForward() {
+            const checks = document.querySelectorAll('#forwardChatList input[type="checkbox"]:checked');
+            const chatIds = Array.from(checks).map(function(cb) { return parseInt(cb.value); });
+            if (chatIds.length === 0) return;
+            fetch('/api/forward', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_id: forwardMsgId, chat_ids: chatIds })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                closeForwardModal();
+                forwardMsgId = null;
+            });
+        }
+
+        // Search
+        function toggleSearch() {
+            const el = document.getElementById('chatSearch');
+            el.classList.toggle('active');
+            if (el.classList.contains('active')) {
+                document.getElementById('searchInput').focus();
+            } else {
+                clearSearch();
+            }
+        }
+        function clearSearch() {
+            document.querySelectorAll('.message').forEach(function(m) { m.style.display = ''; });
+        }
+        function searchMessages(query) {
+            const q = query.trim().toLowerCase();
+            document.querySelectorAll('.message').forEach(function(m) {
+                if (!q) { m.style.display = ''; return; }
+                const text = (m.querySelector('.msg-text')?.textContent || '').toLowerCase();
+                const author = (m.querySelector('.msg-author')?.textContent || '').toLowerCase();
+                m.style.display = (text.includes(q) || author.includes(q)) ? '' : 'none';
+            });
+        }
+
+        // Save / Bookmark message
+        // Pin message in chat
+        function pinMessageInChat() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            fetch('/api/pin_message/' + activeMsgId, { method: 'POST' })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    var el = document.querySelector('.message[data-id="' + activeMsgId + '"]');
+                    if (el) el.classList.toggle('pinned-msg', d.pinned);
+                    var banner = document.getElementById('pinnedBanner');
+                    if (d.pinned) {
+                        var text = el.querySelector('.msg-text')?.textContent || 'Сообщение';
+                        document.getElementById('pinnedBannerText').textContent = '📌 ' + text.slice(0,40);
+                        banner.classList.add('active');
+                    } else {
+                        banner.classList.remove('active');
+                    }
+                });
+        }
+
+        function scrollToPinned() {
+            var el = document.querySelector('.message.pinned-msg');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // Copy with timestamp
+        function copyMsgWithTime() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            var el = document.querySelector('.message[data-id="' + activeMsgId + '"]');
+            if (!el) { closeMsgMenu(); return; }
+            var author = el.querySelector('.msg-author')?.textContent || '';
+            var text = el.dataset.content || '';
+            var time = el.querySelector('.msg-time')?.textContent?.trim() || '';
+            var full = author + ' [' + time + ']: ' + text;
+            navigator.clipboard.writeText(full).catch(function(){});
+            closeMsgMenu();
+        }
+
+        // Select mode
+        var selectModeActive = false;
+        var selectedIds = new Set();
+        function selectMessage() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            if (!selectModeActive) {
+                selectModeActive = true;
+                document.getElementById('selectModeBar').classList.add('active');
+            }
+            var el = document.querySelector('.message[data-id="' + activeMsgId + '"]');
+            if (el) {
+                if (selectedIds.has(activeMsgId)) { selectedIds.delete(activeMsgId); el.classList.remove('selected'); }
+                else { selectedIds.add(activeMsgId); el.classList.add('selected'); }
+                el.classList.add('select-mode');
+                el.style.pointerEvents = 'none';
+            }
+            document.getElementById('selectCount').textContent = selectedIds.size;
+            closeMsgMenu();
+        }
+        function exitSelectMode() {
+            selectModeActive = false;
+            selectedIds.clear();
+            document.getElementById('selectModeBar').classList.remove('active');
+            document.querySelectorAll('.message.select-mode').forEach(function(m){
+                m.classList.remove('select-mode','selected');
+                m.style.pointerEvents = '';
+            });
+        }
+        function selectAllMessages() {
+            document.querySelectorAll('.message').forEach(function(m){
+                var id = parseInt(m.dataset.id);
+                if (!selectedIds.has(id)) { selectedIds.add(id); m.classList.add('selected'); }
+                m.classList.add('select-mode');
+                m.style.pointerEvents = 'none';
+            });
+            document.getElementById('selectCount').textContent = selectedIds.size;
+        }
+        function deleteSelected() {
+            if (selectedIds.size === 0) return;
+            if (!confirm('Удалить ' + selectedIds.size + ' сообщений?')) return;
+            var promises = [];
+            selectedIds.forEach(function(id){
+                promises.push(fetch('/api/delete_message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message_id: id })
+                }));
+            });
+            Promise.all(promises).then(function(){
+                selectedIds.forEach(function(id){
+                    var el = document.querySelector('.message[data-id="' + id + '"]');
+                    if (el) el.remove();
+                });
+                exitSelectMode();
+            });
+        }
+        function forwardSelected() {
+            if (selectedIds.size === 0) return;
+            var ids = Array.from(selectedIds);
+            forwardMsgId = ids[0];
+            exitSelectMode();
+            forwardMessage();
+        }
+
+        // Report
+        function reportMessage() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            fetch('/api/report_message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_id: activeMsgId })
+            }).then(function(r){ return r.json(); }).then(function(d){
+                alert(d.msg || 'Спасибо, жалоба отправлена');
+            });
+        }
+
+        // Delete for all
+        function deleteForAll() {
+            if (!activeMsgId) { closeMsgMenu(); return; }
+            if (!confirm('Удалить это сообщение у всех?')) return;
+            fetch('/api/delete_for_all', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_id: activeMsgId })
+            }).then(function(r){ return r.json(); }).then(function(){
+                var el = document.querySelector('.message[data-id="' + activeMsgId + '"]');
+                if (el) { el.dataset.content = 'Сообщение удалено';
+                    var txt = el.querySelector('.msg-text');
+                    if (txt) txt.textContent = 'Сообщение удалено';
+                }
+            });
+        }
+
+        // Pin / Unpin chat
+        function pinChat(cid) {
+            fetch('/api/pin_chat/' + cid, { method: 'POST' })
+                .then(function(r){ return r.json(); })
+                .then(function(d){ alert(d.pinned ? 'Чат закреплён' : 'Чат откреплён'); });
+        }
+
+        // Block / Unblock
+        function toggleBlock() {
+            if (!otherUserId) return;
+            var action = confirm('Заблокировать пользователя?') ? 'block' : (confirm('Разблокировать?') ? 'unblock' : null);
+            if (!action) return;
+            var form = new FormData();
+            form.append('action', action);
+            fetch('/api/block/' + otherUserId, { method: 'POST', body: form })
+                .then(function(r){ return r.json(); })
+                .then(function(d){ if (d.ok) alert(action === 'block' ? 'Пользователь заблокирован' : 'Пользователь разблокирован'); });
+        }
+
+        // Accent color
+        function showAccentModal() {
+            document.getElementById('accentModal').classList.add('active');
+        }
+        function setAccent(cid, color) {
+            var form = new FormData();
+            form.append('color', color);
+            fetch('/api/set_accent/' + cid, { method: 'POST', body: form })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    document.querySelectorAll('.accent-dot').forEach(function(dot){ dot.classList.remove('active'); });
+                    var dot = document.querySelector('.accent-dot[data-color="' + color + '"]');
+                    if (dot) dot.classList.add('active');
+                    if (color !== 'default') {
+                        document.getElementById('messages').style.background = color !== 'default' ? color : '';
+                    } else {
+                        document.getElementById('messages').style.background = '';
+                    }
+                });
+        }
+
+        // Typing indicator SSE handler
+        function handleTypingEvent(data) {
+            var el = document.getElementById('typingIndicator');
+            if (data && data.username) {
+                el.textContent = data.username + ' печатает...';
+                el.classList.add('active');
+                clearTimeout(el._typingTimer);
+                el._typingTimer = setTimeout(function(){ el.classList.remove('active'); }, 4000);
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.msg-menu')) closeMsgMenu();
+        });
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('active');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('active');
+        }
+        document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
+        function showModal() { document.getElementById('groupModal').classList.add('active'); closeSidebar(); }
+        function hideModal() { document.getElementById('groupModal').classList.remove('active'); }
+        document.getElementById('groupModal').addEventListener('click', function(e) {
+            if (e.target === this) hideModal();
+        });
+        document.getElementById('addMemberModal').addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('active');
+        });
+
+        if (isMobile) { document.querySelector('.mobile-toggle').style.display = 'flex'; }
+        window.addEventListener('resize', function() {
+            const btn = document.querySelector('.mobile-toggle');
+            if (window.innerWidth <= 768) btn.style.display = 'flex';
+            else btn.style.display = 'none';
+        });
+
+        window.addEventListener('beforeunload', function() {
+            if (eventSource) eventSource.close();
+        });
+
+        document.getElementById('reactionPicker').addEventListener('click', function(e) { e.stopPropagation(); });
+
+        /* ===== Mobile Swipe Back ===== */
+        if (isMobile) {
+            (function() {
+                var startX = 0, startY = 0;
+                document.addEventListener('touchstart', function(e) {
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                }, {passive: true});
+                document.addEventListener('touchend', function(e) {
+                    var dx = e.changedTouches[0].clientX - startX;
+                    var dy = e.changedTouches[0].clientY - startY;
+                    if (dx > 80 && Math.abs(dy) < 60 && startX < 30) {
+                        window.location.href = '/chats';
+                    }
+                }, {passive: true});
+            })();
+        }
+
+        /* ===== Mobile Swipe to Reply ===== */
+        if (isMobile) {
+            document.querySelectorAll('.message').forEach(function(el) {
+                var sx = 0, sy = 0;
+                el.addEventListener('touchstart', function(e) {
+                    sx = e.changedTouches[0].clientX;
+                    sy = e.changedTouches[0].clientY;
+                }, {passive: true});
+                el.addEventListener('touchend', function(e) {
+                    var dx = e.changedTouches[0].clientX - sx;
+                    var dy = e.changedTouches[0].clientY - sy;
+                    if (Math.abs(dx) > 60 && Math.abs(dy) < 30 && dx < 0) {
+                        showMsgMenu(null, parseInt(el.dataset.id), parseInt(el.dataset.user));
+                    }
+                }, {passive: true});
+            });
+        }
+
+        /* ===== Call System ===== */
+        var activeCallId = null;
+        var localStream = null;
+        var remoteStream = null;
+        var peerConn = null;
+        var callType = null;
+        var callStartTime = null;
+        var callTimerInterval = null;
+        var callModal = null;
+        var pendingCallOffer = null;
+        var pendingIceCandidates = [];
+
+        function ensureCallModal() {
+            if (document.getElementById('callModal')) return;
+            var d = document.createElement('div');
+            d.id = 'callModal';
+            d.className = 'call-modal';
+            d.innerHTML = '<div class="call-overlay"></div>'
+                + '<div class="call-container">'
+                + '  <div class="call-video-area">'
+                + '    <video id="remoteVideo" autoplay playsinline class="call-remote-video"></video>'
+                + '    <video id="localVideo" autoplay playsinline muted class="call-local-video"></video>'
+                + '  </div>'
+                + '  <div class="call-info">'
+                + '    <div class="call-avatar" id="callAvatar">?</div>'
+                + '    <div class="call-name" id="callName">...</div>'
+                + '    <div class="call-status" id="callStatus">Звонок...</div>'
+                + '    <div class="call-timer" id="callTimer" style="display:none;">00:00</div>'
+                + '  </div>'
+                + '  <div class="call-controls">'
+                + '    <button class="call-control-btn mute-btn" onclick="toggleMute()" id="muteBtn">🔊</button>'
+                + '    <button class="call-control-btn end-btn" onclick="endCall()">🔴</button>'
+                + '    <button class="call-control-btn video-btn" onclick="toggleVideo()" id="videoBtn">📷</button>'
+                + '  </div>'
+                + '</div>';
+            document.body.appendChild(d);
+        }
+
+        function createPC(stream) {
+            var config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            try { peerConn = new RTCPeerConnection(config); } catch(e) { peerConn = new webkitRTCPeerConnection(config); }
+            peerConn.onicecandidate = function(e) {
+                if (e.candidate && activeCallId) {
+                    fetch('/api/call_signal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId, signal_type:'ice', data:JSON.stringify(e.candidate)}) });
+                }
+            };
+            peerConn.ontrack = function(e) {
+                remoteStream = e.streams[0];
+                var rv = document.getElementById('remoteVideo');
+                if (rv) rv.srcObject = remoteStream;
+            };
+            (stream || localStream).getTracks().forEach(function(t) { peerConn.addTrack(t, stream || localStream); });
+            return peerConn;
+        }
+
+        function startCall(type) {
+            ensureCallModal();
+            callType = type;
+            callModal = document.getElementById('callModal');
+            callModal.style.display = 'flex';
+            document.getElementById('callStatus').textContent = 'Звонок...';
+            document.getElementById('callTimer').style.display = 'none';
+            document.getElementById('callAvatar').textContent = '{{ display_name[0]|upper }}';
+            document.getElementById('callName').textContent = '{{ display_name }}';
+            document.getElementById('remoteVideo').style.display = type === 'video' ? 'block' : 'none';
+
+            var mediaPromise = type === 'video'
+                ? navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user', width: 320, height: 240 } })
+                : navigator.mediaDevices.getUserMedia({ audio: true });
+
+            mediaPromise.then(function(s) {
+                localStream = s;
+                document.getElementById('localVideo').srcObject = s;
+                createPC(s);
+                fetch('/api/start_call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({chat_id:chatId, type:callType}) })
+                    .then(function(r){ return r.json(); })
+                    .then(function(d) {
+                        if (!d.ok) { alert('Ошибка звонка'); endCall(); return; }
+                        activeCallId = d.call_id;
+                        peerConn.createOffer().then(function(offer) {
+                            return peerConn.setLocalDescription(offer);
+                        }).then(function() {
+                            fetch('/api/call_signal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId, signal_type:'offer', data:JSON.stringify(peerConn.localDescription)}) });
+                        });
+                    });
+            }).catch(function(){ alert('Нет доступа к медиа'); endCall(); });
+        }
+
+        function answerCall(callId, callerId) {
+            ensureCallModal();
+            activeCallId = callId;
+            var data = null;
+            for (var k in pendingCalls) {
+                if (pendingCalls[k].call_id == callId) { data = pendingCalls[k]; break; }
+            }
+            var modal = document.getElementById('callModal');
+            modal.style.display = 'flex';
+            callType = (data && data.type) || 'audio';
+            document.getElementById('callStatus').textContent = 'Подключение...';
+            document.getElementById('callTimer').style.display = 'none';
+            document.getElementById('callAvatar').textContent = '{{ display_name[0]|upper }}';
+            document.getElementById('callName').textContent = '{{ display_name }}';
+            document.getElementById('remoteVideo').style.display = callType === 'video' ? 'block' : 'none';
+            closeIncomingAlert();
+
+            var mediaPromise = callType === 'video'
+                ? navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user', width: 320, height: 240 } })
+                : navigator.mediaDevices.getUserMedia({ audio: true });
+
+            mediaPromise.then(function(s) {
+                localStream = s;
+                document.getElementById('localVideo').srcObject = s;
+                createPC(s);
+                fetch('/api/answer_call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId, accept:true}) });
+
+                if (pendingCallOffer) {
+                    var offer = JSON.parse(pendingCallOffer);
+                    peerConn.setRemoteDescription(new RTCSessionDescription(offer)).then(function() {
+                        pendingIceCandidates.forEach(function(c) {
+                            try { peerConn.addIceCandidate(new RTCIceCandidate(JSON.parse(c))); } catch(e) {}
+                        });
+                        pendingIceCandidates = [];
+                        return peerConn.createAnswer();
+                    }).then(function(answer) {
+                        return peerConn.setLocalDescription(answer);
+                    }).then(function() {
+                        fetch('/api/call_signal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId, signal_type:'answer', data:JSON.stringify(peerConn.localDescription)}) });
+                    });
+                    pendingCallOffer = null;
+                }
+            }).catch(function(){ alert('Нет доступа к медиа'); endCall(); });
+        }
+
+        function rejectCall(callId) {
+            fetch('/api/answer_call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:callId, accept:false}) });
+            closeIncomingAlert();
+        }
+
+        function endCall() {
+            if (activeCallId) {
+                fetch('/api/end_call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId}) });
+            }
+            if (peerConn) { try { peerConn.close(); } catch(e) {} peerConn = null; }
+            if (localStream) { localStream.getTracks().forEach(function(t){ t.stop(); }); localStream = null; }
+            remoteStream = null;
+            if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
+            callStartTime = null;
+            activeCallId = null;
+            pendingCallOffer = null;
+            pendingIceCandidates = [];
+            callModal = document.getElementById('callModal');
+            if (callModal) callModal.style.display = 'none';
+            closeIncomingAlert();
+        }
+
+        function toggleMute() {
+            if (!localStream) return;
+            var t = localStream.getAudioTracks()[0];
+            if (t) { t.enabled = !t.enabled; document.getElementById('muteBtn').textContent = t.enabled ? '🔊' : '🔇'; }
+        }
+
+        function toggleVideo() {
+            if (!localStream) return;
+            var t = localStream.getVideoTracks()[0];
+            if (t) { t.enabled = !t.enabled;
+                document.getElementById('videoBtn').textContent = t.enabled ? '📷' : '🚫';
+                document.getElementById('localVideo').style.display = t.enabled ? 'block' : 'none';
+            }
+        }
+
+        // Incoming call: full-screen overlay
+        var pendingCalls = [];
+
+        function showIncomingCall(data) {
+            closeIncomingAlert();
+            pendingCalls.push(data);
+            var div = document.createElement('div');
+            div.id = 'incomingCallAlert';
+            div.className = 'incoming-call-full';
+            div.innerHTML = '<div class="incoming-call-backdrop"></div>'
+                + '<div class="incoming-call-content">'
+                + '  <div class="incoming-call-avatar">{{ display_name[0]|upper }}</div>'
+                + '  <div class="incoming-call-name">{{ display_name }}</div>'
+                + '  <div class="incoming-call-type">' + (data.type === 'video' ? '📹 Видеозвонок' : '📞 Голосовой звонок') + '</div>'
+                + '  <div class="incoming-call-actions">'
+                + '    <button class="incoming-call-btn decline" onclick="rejectCall(' + data.call_id + ')">Отклонить</button>'
+                + '    <button class="incoming-call-btn accept" onclick="answerCall(' + data.call_id + ',' + data.caller_id + ')">Ответить</button>'
+                + '  </div>'
+                + '</div>';
+            document.body.appendChild(div);
+        }
+
+        function closeIncomingAlert() {
+            var el = document.getElementById('incomingCallAlert');
+            if (el) { el.remove(); }
+        }
+
+        // Handle call events from SSE
+        function handleCallEvent(data) {
+            if (data.event === 'incoming_call') {
+                showIncomingCall(data);
+            } else if (data.event === 'call_accepted') {
+                var st = document.getElementById('callStatus');
+                var ti = document.getElementById('callTimer');
+                if (st) { st.textContent = 'Подключено'; }
+                callStartTime = Date.now();
+                if (callTimerInterval) clearInterval(callTimerInterval);
+                callTimerInterval = setInterval(function() {
+                    var sec = Math.floor((Date.now() - callStartTime) / 1000);
+                    var m = String(Math.floor(sec / 60)).padStart(2, '0');
+                    var s = String(sec % 60).padStart(2, '0');
+                    if (ti) { ti.textContent = m + ':' + s; ti.style.display = 'block'; }
+                    if (st) st.style.display = 'none';
+                }, 1000);
+            } else if (data.event === 'call_rejected') {
+                endCall();
+                alert('Звонок отклонён');
+            } else if (data.event === 'call_ended') {
+                endCall();
+            } else if (data.event === 'signal') {
+                if (data.type === 'offer') {
+                    // Cache offer for when answerCall creates the PC
+                    pendingCallOffer = data.data;
+                    // If PC already exists (callee answered before offer arrived)
+                    if (peerConn && activeCallId) {
+                        var offer = JSON.parse(pendingCallOffer);
+                        peerConn.setRemoteDescription(new RTCSessionDescription(offer)).then(function() {
+                            pendingIceCandidates.forEach(function(c) {
+                                try { peerConn.addIceCandidate(new RTCIceCandidate(JSON.parse(c))); } catch(e) {}
+                            });
+                            pendingIceCandidates = [];
+                            return peerConn.createAnswer();
+                        }).then(function(answer) {
+                            return peerConn.setLocalDescription(answer);
+                        }).then(function() {
+                            fetch('/api/call_signal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId, signal_type:'answer', data:JSON.stringify(peerConn.localDescription)}) });
+                        });
+                        pendingCallOffer = null;
+                    }
+                } else if (data.type === 'answer' && peerConn && peerConn.remoteDescription === null) {
+                    var answer = JSON.parse(data.data);
+                    peerConn.setRemoteDescription(new RTCSessionDescription(answer)).then(function() {
+                        pendingIceCandidates.forEach(function(c) {
+                            try { peerConn.addIceCandidate(new RTCIceCandidate(JSON.parse(c))); } catch(e) {}
+                        });
+                        pendingIceCandidates = [];
+                    });
+                } else if (data.type === 'ice') {
+                    if (peerConn && peerConn.remoteDescription) {
+                        try { peerConn.addIceCandidate(new RTCIceCandidate(JSON.parse(data.data))); } catch(e) {}
+                    } else {
+                        pendingIceCandidates.push(data.data);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

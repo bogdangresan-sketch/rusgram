@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Админ — Rusgram</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app">
+        <div class="sidebar sidebar-always" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Rusgram</h2>
+                <div class="sidebar-actions">
+                    <a href="{{ url_for('chats') }}">← Чаты</a>
+                    <a href="{{ url_for('admin_reports') }}">⚠️ Жалобы</a>
+                    <a href="{{ url_for('logout') }}">Выйти</a>
+                </div>
+            </div>
+        </div>
+        <div class="main-content" style="padding:20px;overflow-y:auto;">
+            <h1 style="color:#fff;font-size:22px;margin-bottom:20px;">⚙️ Админ-панель</h1>
+            <div style="background:#1f2c33;border-radius:12px;padding:20px;color:#e9edef;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <div style="font-size:16px;font-weight:600;">👑 Режим «Написать от имени создателя»</div>
+                        <div style="font-size:13px;color:#8696a0;margin-top:4px;">Ваши сообщения будут отмечены звездой ⭐ создателя</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:50px;height:26px;">
+                        <input type="checkbox" id="creatorToggle" onchange="toggleCreatorMode()" {{ 'checked' if creator_mode else '' }} style="opacity:0;width:0;height:0;">
+                        <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#2a3942;border-radius:26px;transition:0.3s;"></span>
+                        <span id="creatorKnob" style="position:absolute;content:'';height:20px;width:20px;left:3px;bottom:3px;background:#8696a0;border-radius:50%;transition:0.3s;{{ 'left:27px;background:#00a884;' if creator_mode else '' }}"></span>
+                    </label>
+                </div>
+            </div>
+            <div style="background:#1f2c33;border-radius:12px;padding:20px;color:#e9edef;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <div style="font-size:16px;font-weight:600;">🕵️ Анонимный режим</div>
+                        <div style="font-size:13px;color:#8696a0;margin-top:4px;">Ваши сообщения будут показываться как от «Rusgram»</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:50px;height:26px;">
+                        <input type="checkbox" id="anonToggle" onchange="toggleAnonMode()" {{ 'checked' if anonymous_mode else '' }} style="opacity:0;width:0;height:0;">
+                        <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#2a3942;border-radius:26px;transition:0.3s;"></span>
+                        <span id="anonKnob" style="position:absolute;content:'';height:20px;width:20px;left:3px;bottom:3px;background:#8696a0;border-radius:50%;transition:0.3s;{{ 'left:27px;background:#00a884;' if anonymous_mode else '' }}"></span>
+                    </label>
+                </div>
+            </div>
+            <a href="{{ url_for('admin_reports') }}" style="display:block;background:#1f2c33;border-radius:12px;padding:16px;color:#e9edef;text-decoration:none;font-size:15px;">⚠️ Жалобы на сообщения</a>
+        </div>
+    </div>
+    <script>
+        function toggleCreatorMode() {
+            const enabled = document.getElementById('creatorToggle').checked;
+            fetch('/api/creator_mode', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled}) })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if(d.ok){
+                        const knob = document.getElementById('creatorKnob');
+                        knob.style.left = enabled ? '27px' : '3px';
+                        knob.style.background = enabled ? '#00a884' : '#8696a0';
+                    }
+                });
+        }
+        function toggleAnonMode() {
+            const enabled = document.getElementById('anonToggle').checked;
+            fetch('/api/anonymous_mode', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled}) })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if(d.ok){
+                        const knob = document.getElementById('anonKnob');
+                        knob.style.left = enabled ? '27px' : '3px';
+                        knob.style.background = enabled ? '#00a884' : '#8696a0';
+                    }
+                });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Жалобы — Rusgram</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app">
+        <div class="sidebar sidebar-always" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Rusgram</h2>
+                <div class="sidebar-actions">
+                    <a href="{{ url_for('chats') }}">← Чаты</a>
+                    <a href="{{ url_for('logout') }}">Выйти</a>
+                </div>
+            </div>
+        </div>
+        <div class="main-content" style="padding:20px;overflow-y:auto;">
+            <h1 style="color:#fff;font-size:22px;margin-bottom:20px;">⚠️ Жалобы на сообщения</h1>
+            {% if not reports %}
+            <p style="color:#8696a0;">Жалоб пока нет</p>
+            {% else %}
+            {% for r in reports %}
+            <div class="report-card" style="background:#1f2c33;border-radius:12px;padding:16px;margin-bottom:12px;color:#e9edef;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+                    <span style="font-size:13px;color:#8696a0;">{{ r['created_at'] }}</span>
+                    <div style="display:flex;gap:6px;">
+                        <a href="{{ url_for('start_private', other_id=r['author_id']) }}" style="background:#00a884;border:none;border-radius:8px;padding:6px 14px;color:#fff;cursor:pointer;font-size:13px;text-decoration:none;">✉️ Написать автору</a>
+                        <form method="POST" action="{{ url_for('admin_delete_report', rid=r['id']) }}" style="margin:0;">
+                            <button type="submit" style="background:#ef5350;border:none;border-radius:8px;padding:6px 14px;color:#fff;cursor:pointer;font-size:13px;">Удалить жалобу</button>
+                        </form>
+                    </div>
+                </div>
+                <div style="font-size:14px;margin-bottom:6px;">
+                    <strong>От:</strong> {{ r['reporter_name'] }} <span style="color:#8696a0;">на</span> <strong>{{ r['author_name'] }}</strong>
+                </div>
+                <div style="font-size:14px;margin-bottom:4px;">
+                    <strong>Чат ID:</strong> {{ r['chat_id'] }} · <strong>Сообщение ID:</strong> {{ r['message_id'] }}
+                </div>
+                {% if r['msg_content'] %}
+                <div style="background:#0b141a;border-radius:8px;padding:10px;margin-top:6px;font-size:14px;word-break:break-word;">
+                    {{ r['msg_content'] }}
+                </div>
+                {% endif %}
+                {% if r['file'] %}
+                <div style="margin-top:6px;font-size:13px;color:#00a884;">
+                    {% if r['file_type'] == 'photo' %}📷 Фото{% elif r['file_type'] == 'video' %}🎬 Видео{% elif r['file_type'] == 'gif' %}GIF{% elif r['file_type'] == 'audio' %}🎤 Голосовое{% else %}📎 Файл{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

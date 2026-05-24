@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#111b21">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Чаты — Rusgram</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <div class="app">
+        <div class="sidebar sidebar-always" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Rusgram</h2>
+                <div class="sidebar-actions">
+                    <button onclick="showModal()">+ Группа</button>
+                    {% if session['user_id'] == 1 %}<a href="{{ url_for('admin_panel') }}">⚙️ Админ</a>{% endif %}
+                    <a href="{{ url_for('logout') }}">Выйти</a>
+                </div>
+            </div>
+            <div class="sidebar-user" style="position:relative;">
+                <div class="avatar" id="myAvatar" style="cursor:pointer;position:relative;" onclick="document.getElementById('avatarInput').click()">
+                    {% if current_user and current_user['avatar'] %}
+                    <img src="{{ url_for('uploaded_file', filename=current_user['avatar']) }}">
+                    {% else %}
+                    {{ session['username'][0]|upper }}
+                    {% endif %}
+                    <span class="online-dot-own"></span>
+                </div>
+                <span class="user-badge">{{ session['username'] }}</span>
+                <form action="{{ url_for('upload_avatar') }}" method="POST" enctype="multipart/form-data" style="display:none;">
+                    <input type="file" name="avatar" id="avatarInput" accept="image/*" onchange="this.form.submit()">
+                </form>
+            </div>
+            <div class="section-title">Чаты</div>
+            <div class="chat-list" id="chatList" style="flex:1;overflow-y:auto;">
+                {% for c in chats %}
+                <a href="{{ url_for('chat', chat_id=c['id']) }}" class="chat-card {% if c['pinned'] %}pinned{% endif %}" id="chat-{{ c['id'] }}" onclick="closeSidebar()">
+                    <div class="chat-avatar">{{ c['display_name'][0]|upper }}</div>
+                    <div class="chat-info">
+                        <div class="chat-name">
+                            {{ c['display_name'] }}{% if c['pinned'] %}<span class="pin-icon">📌</span>{% endif %}
+                            <span class="chat-type">{{ 'Группа' if c['type'] == 'group' else 'ЛС' }}</span>
+                        </div>
+                        <div class="last-msg" id="lastMsg-{{ c['id'] }}">
+                            {% if c['draft'] %}<span style="color:#ef5350;">Черновик: </span>{{ c['draft'][:50] }}{% elif c['last_msg_file_type'] == 'image' %}📷 Фото
+                            {% elif c['last_msg_file_type'] == 'video' %}🎬 Видео
+                            {% elif c['last_msg_file_type'] == 'gif' %}GIF
+                            {% elif c['last_msg'] %}{{ c['last_msg'][:60] }}{% if c['last_msg']|length > 60 %}...{% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% else %}
+                <div class="empty-chats" id="emptyChats">
+                    <div class="empty-arrow">↓</div>
+                    <div class="empty-text">снизу можете выбрать<br>кому написать</div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="section-title">Пользователи</div>
+            <div class="user-list" id="userList" style="flex:none;max-height:200px;overflow-y:auto;">
+                {% for u in users %}
+                <a href="{{ url_for('start_private', other_id=u['id']) }}" class="user-item" id="user-{{ u['id'] }}" onclick="closeSidebar()">
+                    <div class="avatar-sm">
+                        {% if u['avatar'] %}
+                        <img src="{{ url_for('uploaded_file', filename=u['avatar']) }}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
+                        {% else %}
+                        {{ u['username'][0]|upper }}
+                        {% endif %}
+                    </div>
+                    <span>{{ u['username'] }}{% if u['username'] == 'Богдан' %} <span class="creator-star" onclick="event.stopPropagation();alert('создатель')">⭐</span>{% endif %}</span>
+                </a>
+                {% else %}
+                <div style="padding:16px;color:#8696a0;font-size:13px;">Нет других пользователей</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="main">
+            <div class="sidebar-header" style="border-bottom:1px solid #222e35;display:flex;align-items:center;padding:14px 16px;">
+                <button class="mobile-toggle" id="menuBtn" onclick="toggleSidebar()" style="display:none;">
+                    <span></span><span></span><span></span>
+                </button>
+                <h2 style="font-size:18px;flex:1;">Rusgram</h2>
+            </div>
+            <div class="welcome" id="welcomeMsg">
+                <h1>Добро пожаловать</h1>
+                <p>Выберите пользователя слева, чтобы начать диалог</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="groupModal">
+        <div class="modal">
+            <h2>Создать группу</h2>
+            <form action="{{ url_for('create_group') }}" method="POST">
+                <input type="text" name="name" placeholder="Название группы" required>
+                <div class="section-title" style="padding-left:0;">Выберите участников</div>
+                <div class="members-section">
+                    {% for u in users %}
+                    <label><input type="checkbox" name="members" value="{{ u['id'] }}"> {{ u['username'] }}</label>
+                    {% else %}
+                    <p style="color:#8696a0;font-size:13px;padding:8px 0;">Нет других пользователей</p>
+                    {% endfor %}
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="hideModal()">Отмена</button>
+                    <button type="submit" class="btn-primary">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('active');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('active');
+        }
+        document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
+        function showModal() { document.getElementById('groupModal').classList.add('active'); closeSidebar(); }
+        function hideModal() { document.getElementById('groupModal').classList.remove('active'); }
+        document.getElementById('groupModal').addEventListener('click', function(e) {
+            if (e.target === this) hideModal();
+        });
+
+        // Real-time updates via polling
+        function updateChatList() {
+            fetch('/api/chats').then(function(r) { return r.json(); }).then(function(data) {
+                if (!data || !data.chats) return;
+
+                var list = document.getElementById('chatList');
+                var welcome = document.getElementById('welcomeMsg');
+                var empty = document.getElementById('emptyChats');
+
+                if (data.chats.length === 0) {
+                    if (welcome) welcome.style.display = 'flex';
+                    if (empty) empty.style.display = 'block';
+                    return;
+                }
+                if (welcome) welcome.style.display = 'none';
+                if (empty) empty.style.display = 'none';
+                if (!list) return;
+
+                // Re-order: pinned first
+                data.chats.sort(function(a,b){ return (a.pinned === b.pinned) ? 0 : a.pinned ? -1 : 1; });
+                for (var i = 0; i < data.chats.length; i++) {
+                    var c = data.chats[i];
+                    var card = document.getElementById('chat-' + c.id);
+                    if (card) {
+                        var nameDiv = card.querySelector('.chat-name');
+                        if (nameDiv) {
+                            var pinSpan = nameDiv.querySelector('.pin-icon');
+                            if (c.pinned && !pinSpan) nameDiv.insertBefore(document.createTextNode(' '), nameDiv.firstChild);
+                            if (c.pinned) card.classList.add('pinned');
+                            else card.classList.remove('pinned');
+                        }
+                        var msgEl = document.getElementById('lastMsg-' + c.id);
+                        if (msgEl) {
+                            if (c.draft) msgEl.innerHTML = '<span style="color:#ef5350;">Черновик: </span>' + c.draft.slice(0,50);
+                            else if (c.last_msg_file_type === 'image') msgEl.textContent = '📷 Фото';
+                            else if (c.last_msg_file_type === 'video') msgEl.textContent = '🎬 Видео';
+                            else if (c.last_msg_file_type === 'gif') msgEl.textContent = 'GIF';
+                            else if (c.last_msg) msgEl.textContent = c.last_msg.length > 60 ? c.last_msg.slice(0,60) + '...' : c.last_msg;
+                            else msgEl.textContent = '';
+                        }
+                        list.removeChild(card);
+                    } else {
+                        card = document.createElement('a');
+                        card.className = 'chat-card' + (c.pinned ? ' pinned' : '');
+                        card.href = '{{ url_for("chat", chat_id=0) }}'.replace('0', c.id);
+                        card.id = 'chat-' + c.id;
+                        card.onclick = closeSidebar;
+                        var avatar = document.createElement('div');
+                        avatar.className = 'chat-avatar';
+                        avatar.textContent = c.display_name ? c.display_name[0].toUpperCase() : '?';
+                        card.appendChild(avatar);
+                        var info = document.createElement('div');
+                        info.className = 'chat-info';
+                        var nameDiv = document.createElement('div');
+                        nameDiv.className = 'chat-name';
+                        nameDiv.innerHTML = c.display_name + (c.pinned ? ' <span class="pin-icon">📌</span>' : '') + ' <span class="chat-type">' + (c.type === 'group' ? 'Группа' : 'ЛС') + '</span>';
+                        info.appendChild(nameDiv);
+                        var lastDiv = document.createElement('div');
+                        lastDiv.className = 'last-msg';
+                        lastDiv.id = 'lastMsg-' + c.id;
+                        info.appendChild(lastDiv);
+                        card.appendChild(info);
+                    }
+                    list.appendChild(card);
+                }
+
+
+            }).catch(function(e) {});
+        }
+
+        setInterval(updateChatList, 3000);
+        setTimeout(updateChatList, 500);
+    </script>
+</body>
+</html>
