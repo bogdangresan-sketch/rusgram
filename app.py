@@ -640,11 +640,23 @@ def chat(chat_id):
         return redirect(url_for('login'))
     db = get_db()
     eff_id = effective_user_id()
+    real_id = session.get('user_id')
     member = db.execute('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?',
                         (chat_id, eff_id)).fetchone()
     if not member:
-        db.close()
-        return redirect(url_for('chats'))
+        if eff_id != real_id:
+            real_member = db.execute('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?',
+                                     (chat_id, real_id)).fetchone()
+            if real_member:
+                db.execute('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', (chat_id, eff_id))
+                db.commit()
+                member = True
+            else:
+                db.close()
+                return redirect(url_for('chats'))
+        else:
+            db.close()
+            return redirect(url_for('chats'))
     chat_info = dict(db.execute('SELECT * FROM chats WHERE id = ?', (chat_id,)).fetchone())
     pinned_msgs = [dict(r) for r in db.execute('''
         SELECT m.id, m.content, m.created_at, m.file, m.file_type, m.reply_to, m.user_id, u.username
@@ -713,19 +725,34 @@ def start_private(other_id):
         return redirect(url_for('login'))
     db = get_db()
     eff_id = effective_user_id()
+    real_id = session.get('user_id')
+
     existing = db.execute('''
         SELECT c.id FROM chats c
         WHERE c.type = 'private'
         AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = ?)
         AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = ?)
     ''', (eff_id, other_id)).fetchone()
+
+    if not existing and eff_id != real_id:
+        existing = db.execute('''
+            SELECT c.id FROM chats c
+            WHERE c.type = 'private'
+            AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = ?)
+            AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = ?)
+        ''', (real_id, other_id)).fetchone()
+
     if existing:
         chat_id = existing['id']
+        if eff_id != real_id:
+            db.execute('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', (chat_id, eff_id))
     else:
         cursor = db.execute("INSERT INTO chats (type, created_by) VALUES ('private', ?)", (eff_id,))
         chat_id = cursor.lastrowid
         db.execute('INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)', (chat_id, eff_id))
         db.execute('INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)', (chat_id, other_id))
+        if eff_id != real_id:
+            db.execute('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', (chat_id, real_id))
     db.commit()
     db.close()
     return redirect(url_for('chat', chat_id=chat_id))
@@ -1062,8 +1089,9 @@ def api_stream(chat_id):
         last_id = request.args.get('since', 0, type=int)
         last_reaction = 0
         eff_id = effective_user_id()
-        db = get_db()
+        db = None
         try:
+            db = get_db()
             while True:
                 try:
                     # Check connection alive, reconnect if needed
@@ -1072,7 +1100,11 @@ def api_stream(chat_id):
                     except Exception:
                         try: db.close()
                         except: pass
-                        db = get_db()
+                        try:
+                            db = get_db()
+                        except Exception:
+                            time.sleep(5)
+                            continue
 
                     messages = db.execute('''
                         SELECT m.id, m.content, m.created_at, m.edited, m.deleted, m.file, m.file_type, m.reply_to, m.status, u.username, m.user_id
@@ -1142,9 +1174,12 @@ def api_stream(chat_id):
                 time.sleep(0.3)
         except GeneratorExit:
             pass
+        except Exception as e:
+            logger.error(f'SSE fatal error for chat {chat_id}: {e}')
         finally:
-            try: db.close()
-            except: pass
+            if db:
+                try: db.close()
+                except: pass
     resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
     resp.headers['Cache-Control'] = 'no-cache'
     resp.headers['X-Accel-Buffering'] = 'no'

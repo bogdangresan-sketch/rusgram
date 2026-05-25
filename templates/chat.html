@@ -1313,36 +1313,7 @@
         }
 
         function startCall(type) {
-            ensureCallModal();
-            callType = type;
-            callModal = document.getElementById('callModal');
-            callModal.style.display = 'flex';
-            document.getElementById('callStatus').textContent = 'Звонок...';
-            document.getElementById('callTimer').style.display = 'none';
-            document.getElementById('callAvatar').textContent = '{{ display_name[0]|upper }}';
-            document.getElementById('callName').textContent = '{{ display_name }}';
-            document.getElementById('remoteVideo').style.display = type === 'video' ? 'block' : 'none';
-
-            var mediaPromise = type === 'video'
-                ? navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user', width: 320, height: 240 } })
-                : navigator.mediaDevices.getUserMedia({ audio: true });
-
-            mediaPromise.then(function(s) {
-                localStream = s;
-                document.getElementById('localVideo').srcObject = s;
-                createPC(s);
-                fetch('/api/start_call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({chat_id:chatId, type:callType}) })
-                    .then(function(r){ return r.json(); })
-                    .then(function(d) {
-                        if (!d.ok) { alert('Ошибка звонка'); endCall(); return; }
-                        activeCallId = d.call_id;
-                        peerConn.createOffer().then(function(offer) {
-                            return peerConn.setLocalDescription(offer);
-                        }).then(function() {
-                            fetch('/api/call_signal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({call_id:activeCallId, signal_type:'offer', data:JSON.stringify(peerConn.localDescription)}) });
-                        });
-                    });
-            }).catch(function(){ alert('Нет доступа к медиа'); endCall(); });
+            alert(type === 'video' ? '📹 Видеозвонки в разработке' : '📞 Звонки в разработке');
         }
 
         function answerCall(callId, callerId) {
