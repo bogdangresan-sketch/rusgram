@@ -1093,11 +1093,18 @@ def api_stream(chat_id):
         last_id = request.args.get('since', 0, type=int)
         last_reaction = 0
         eff_id = effective_user_id()
+        db = None
         try:
+            db = get_db()
             while True:
-                db = None
                 try:
-                    db = DB(app.config['DATABASE'])
+                    try:
+                        db.execute('SELECT 1')
+                    except Exception:
+                        try: db.close()
+                        except: pass
+                        db = get_db()
+
                     messages = db.execute('''
                         SELECT m.id, m.content, m.created_at, m.edited, m.deleted, m.file, m.file_type, m.reply_to, m.status, u.username, m.user_id
                         FROM messages m
@@ -1163,15 +1170,15 @@ def api_stream(chat_id):
                                 del call_tracker[cid]
                 except Exception as e:
                     logger.error(f'SSE error for chat {chat_id}: {e}')
-                finally:
-                    if db:
-                        try: db.close()
-                        except: pass
                 time.sleep(0.5)
         except GeneratorExit:
             pass
         except Exception as e:
             logger.error(f'SSE fatal error for chat {chat_id}: {e}')
+        finally:
+            if db:
+                try: db.close()
+                except: pass
     resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
     resp.headers['Cache-Control'] = 'no-cache'
     resp.headers['X-Accel-Buffering'] = 'no'
