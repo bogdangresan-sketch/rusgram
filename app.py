@@ -40,8 +40,12 @@ class DB:
             self.conn = psycopg2.connect(url)
             self.conn.autocommit = False
         else:
-            self.conn = __import__('sqlite3').connect(url)
-            self.conn.row_factory = __import__('sqlite3').Row
+            sqlite3 = __import__('sqlite3')
+            self.conn = sqlite3.connect(url, timeout=30)
+            self.conn.row_factory = sqlite3.Row
+            self.conn.execute('PRAGMA journal_mode=WAL')
+            self.conn.execute('PRAGMA busy_timeout=30000')
+            self.conn.execute('PRAGMA synchronous=NORMAL')
         self.cursor = None
         self._closed = False
 
@@ -1089,23 +1093,11 @@ def api_stream(chat_id):
         last_id = request.args.get('since', 0, type=int)
         last_reaction = 0
         eff_id = effective_user_id()
-        db = None
         try:
-            db = get_db()
             while True:
+                db = None
                 try:
-                    # Check connection alive, reconnect if needed
-                    try:
-                        db.execute('SELECT 1')
-                    except Exception:
-                        try: db.close()
-                        except: pass
-                        try:
-                            db = get_db()
-                        except Exception:
-                            time.sleep(5)
-                            continue
-
+                    db = DB(app.config['DATABASE'])
                     messages = db.execute('''
                         SELECT m.id, m.content, m.created_at, m.edited, m.deleted, m.file, m.file_type, m.reply_to, m.status, u.username, m.user_id
                         FROM messages m
@@ -1171,15 +1163,15 @@ def api_stream(chat_id):
                                 del call_tracker[cid]
                 except Exception as e:
                     logger.error(f'SSE error for chat {chat_id}: {e}')
-                time.sleep(0.3)
+                finally:
+                    if db:
+                        try: db.close()
+                        except: pass
+                time.sleep(0.5)
         except GeneratorExit:
             pass
         except Exception as e:
             logger.error(f'SSE fatal error for chat {chat_id}: {e}')
-        finally:
-            if db:
-                try: db.close()
-                except: pass
     resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
     resp.headers['Cache-Control'] = 'no-cache'
     resp.headers['X-Accel-Buffering'] = 'no'
