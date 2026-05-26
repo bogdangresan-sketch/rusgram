@@ -522,6 +522,8 @@
         }
 
         let pollingInterval = null;
+        let reactionsPollingInterval = null;
+        let reconnectTimeout = null;
 
         function pollMessages() {
             fetch('/api/messages/' + chatId + '?since=' + lastId)
@@ -545,6 +547,12 @@
                         renderReactions(el, item.all_reactions);
                     }
                 });
+        }
+
+        function stopPolling() {
+            if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+            if (reactionsPollingInterval) { clearInterval(reactionsPollingInterval); reactionsPollingInterval = null; }
+            if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
         }
 
         function connectStream() {
@@ -592,19 +600,16 @@
                 eventSource = null;
                 if (!pollingInterval) {
                     pollingInterval = setInterval(pollMessages, 2000);
-                    setInterval(pollReactions, 3000);
+                    reactionsPollingInterval = setInterval(pollReactions, 3000);
                 }
-                // Try to reconnect SSE after 5 seconds
-                setTimeout(function() {
-                    if (pollingInterval) {
-                        clearInterval(pollingInterval);
-                        pollingInterval = null;
-                    }
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(function() {
+                    stopPolling();
                     if (!eventSource) connectStream();
                 }, 5000);
             };
             eventSource.onopen = function() {
-                if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+                stopPolling();
             };
         }
 
@@ -666,7 +671,7 @@
         });
         // Restore draft on load
         {% if draft %}
-        document.getElementById('msg-input').value = JSON.parse('{{ draft|tojson|safe }}');
+        document.getElementById('msg-input').value = {{ draft|tojson|safe }};
         {% endif %}
         // Apply accent color on load
         {% if chat.get('accent_color') and chat['accent_color'] != 'default' %}
@@ -1216,6 +1221,7 @@
         });
 
         window.addEventListener('beforeunload', function() {
+            stopPolling();
             if (eventSource) eventSource.close();
         });
 

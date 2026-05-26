@@ -26,7 +26,7 @@ app.config['DATABASE'] = os.environ.get('DATABASE_URL') or os.path.join(os.path.
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
-SECRET_CODE = '3257'
+SECRET_CODE = os.environ.get('SECRET_CODE', '3257')
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -514,7 +514,12 @@ def api_call_signal():
 def api_typing():
     if 'user_id' not in session: return jsonify({'error': 'not logged in'}), 401
     uid = effective_user_id(); data = request.get_json(); chat_id = data['chat_id']
-    typing_tracker[f'{chat_id}:{uid}'] = time.time()
+    now = time.time()
+    # cleanup stale entries
+    for key in list(typing_tracker.keys()):
+        if now - typing_tracker[key] > 5:
+            del typing_tracker[key]
+    typing_tracker[f'{chat_id}:{uid}'] = now
     return jsonify({'ok': True})
 
 # ===== Chat Accent Color =====
@@ -836,12 +841,14 @@ def upload_avatar():
     file = request.files['avatar']
     if file.filename == '':
         return redirect(url_for('chats'))
-    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
-    filename = f'avatar_{effective_user_id()}.{ext}'
+    orig_filename = secure_filename(file.filename) or 'avatar.jpg'
+    ext = orig_filename.rsplit('.', 1)[1].lower() if '.' in orig_filename else 'jpg'
+    uid = session.get('user_id')
+    filename = f'avatar_{uid}.{ext}'
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
     db = get_db()
-    db.execute('UPDATE users SET avatar = ? WHERE id = ?', (filename, effective_user_id()))
+    db.execute('UPDATE users SET avatar = ? WHERE id = ?', (filename, uid))
     db.commit()
     db.close()
     session['avatar'] = filename
