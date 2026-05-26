@@ -115,7 +115,7 @@
             <div class="chat-search" id="chatSearch">
                 <input type="text" id="searchInput" placeholder="Поиск сообщений..." oninput="searchMessages(this.value)">
             </div>
-            <div class="typing-indicator" id="typingIndicator">печатает...</div>
+            <div class="typing-indicator" id="typingIndicator"><span class="typing-name"></span><span class="typing-dots"><span></span><span></span><span></span></span></div>
             <div class="messages" id="messages" onclick="closeMsgMenu()">
                 {% set ns = namespace(last_date='') %}
                 {% for msg in messages %}
@@ -1179,7 +1179,7 @@
         function handleTypingEvent(data) {
             var el = document.getElementById('typingIndicator');
             if (data && data.username) {
-                el.textContent = data.username + ' печатает...';
+                el.querySelector('.typing-name').textContent = data.username;
                 el.classList.add('active');
                 clearTimeout(el._typingTimer);
                 el._typingTimer = setTimeout(function(){ el.classList.remove('active'); }, 4000);
