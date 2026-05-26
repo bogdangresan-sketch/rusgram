@@ -75,8 +75,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 
 /* ===== Messages ===== */
 .messages { flex: 1; overflow-y: auto; padding: 16px 48px; display: flex; flex-direction: column; gap: 2px; background: radial-gradient(ellipse at center, #0d1a1e, #0a1014); }
-.message { max-width: 65%; padding: 6px 16px 6px 18px; border-radius: 10px 10px 10px 5px; background: #1f2c33; align-self: flex-start; margin-bottom: 2px; animation: msgIn 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: opacity 0.15s; }
-.message.own { background: linear-gradient(135deg, #005c4b, #0a7c65); align-self: flex-end; border-radius: 10px 10px 5px 10px; }
+.message { max-width: 75%; padding: 8px 18px 8px 20px; border-radius: 12px 12px 12px 6px; background: #1f2c33; align-self: flex-start; margin-bottom: 3px; animation: msgIn 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: opacity 0.15s; font-size: 16px; }
+.message.own { background: linear-gradient(135deg, #005c4b, #0a7c65); align-self: flex-end; border-radius: 12px 12px 6px 12px; }
 @keyframes msgIn { from { opacity:0; transform:translateY(6px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
 .message:not(.own) + .message:not(.own) { border-top-left-radius: 5px; margin-top: 1px; }
 .message.own + .message.own { border-top-right-radius: 5px; margin-top: 1px; }
@@ -86,7 +86,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .message.own + .message.own { padding-top: 3px; }
 .msg-author { font-size: 12px; color: #06cf9c; font-weight: 700; margin-bottom: 1px; }
 .message.own .msg-author { color: #87c9b5; }
-.msg-text { font-size: 14px; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; }
+.msg-text { font-size: 16px; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; }
 .msg-time { font-size: 11px; color: rgba(233,237,239,0.35); text-align: right; margin-top: 2px; min-width: 45px; display: inline-block; float: right; padding-left: 8px; }
 .message.own .msg-time { color: rgba(233,237,239,0.5); }
 
@@ -320,12 +320,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .messages { padding: 8px 8px; }
 
   /* — Telegram-like message bubbles — */
-  .message { max-width: 92%; padding: 10px 16px 10px 16px; font-size: 16px; border-radius: 14px 14px 14px 6px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
-  .message.own { max-width: 88%; border-radius: 14px 14px 6px 14px; }
+  .message { max-width: 95%; padding: 12px 18px 12px 18px; font-size: 17px; border-radius: 16px 16px 16px 8px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+  .message.own { max-width: 92%; border-radius: 16px 16px 8px 16px; }
   .message:active { opacity: 0.85; }
-  .msg-text { font-size: 16px; line-height: 1.5; }
-  .msg-author { font-size: 12px; margin-bottom: 2px; }
-  .msg-time { font-size: 11px; min-width: 36px; }
+  .msg-text { font-size: 17px; line-height: 1.5; }
+  .msg-author { font-size: 13px; margin-bottom: 2px; }
+  .msg-time { font-size: 12px; min-width: 36px; }
   .msg-media { max-width: 100%; border-radius: 8px; }
   .msg-media img, .msg-media video { max-height: 160px; border-radius: 8px; }
   .msg-video-circle { border-radius: 50%; width: 110px; height: 110px; }
